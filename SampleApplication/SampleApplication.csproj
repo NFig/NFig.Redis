@@ -32,9 +32,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="NFig, Version=0.9.0.3, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NFig, Version=0.9.0.8, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\NFig.0.9.0-unstable3\lib\net45\NFig.dll</HintPath>
+      <HintPath>..\packages\NFig.0.9.0-unstable8\lib\net45\NFig.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

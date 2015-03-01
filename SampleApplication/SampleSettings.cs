@@ -22,10 +22,10 @@ namespace SampleApplication
         Oregon
     }
 
-    public class SampleSettings : INFigRedisSettings<Tier, DataCenter>
+    public class SampleSettings : INFigSettings<Tier, DataCenter>
     {
         public string ApplicationName { get; set; }
-        public string SettingsCommit { get; set; }
+        public string Commit { get; set; }
         public Tier Tier { get; set; }
         public DataCenter DataCenter { get; set; }
 

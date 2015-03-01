@@ -7,7 +7,7 @@ using NFig.Redis;
 namespace SampleApplication
 {
     using Override = SettingValue<Tier, DataCenter>;
-    using Manager = SettingsManager<SampleSettings, Tier, DataCenter>;
+    using Factory = SettingsFactory<SampleSettings, Tier, DataCenter>;
     using NFigRedis = NFigRedisStore<SampleSettings, Tier, DataCenter>;
 
     class Program
@@ -36,7 +36,7 @@ namespace SampleApplication
             if (ex != null)
                 throw ex;
 
-            Console.WriteLine(settings.ApplicationName + " settings updated. Commit: " + settings.SettingsCommit);
+            Console.WriteLine(settings.ApplicationName + " settings updated. Commit: " + settings.Commit);
             Console.WriteLine(settings.ConnectionStrings.AdServer);
             Console.WriteLine(nfig.IsCurrent(settings));
             Console.WriteLine();

@@ -8,8 +8,8 @@ using StackExchange.Redis;
 
 namespace NFig.Redis
 {
-    public class NFigRedisStore<TSettings, TTier, TDataCenter>
-        where TSettings : class, INFigRedisSettings<TTier, TDataCenter>, new()
+    public class NFigRedisStore<TSettings, TTier, TDataCenter> : NFigAsyncStore<TSettings, TTier, TDataCenter>
+        where TSettings : class, INFigSettings<TTier, TDataCenter>, new()
         where TTier : struct
         where TDataCenter : struct
     {
@@ -45,8 +45,6 @@ namespace NFig.Redis
         private readonly object _infoCacheLock = new object();
         private readonly Dictionary<string, SettingInfoData> _infoCache = new Dictionary<string, SettingInfoData>();
 
-        public SettingsManager<TSettings, TTier, TDataCenter> Manager { get; }
-
         public NFigRedisStore(
             string redisConnectionString, 
             int dbIndex,
@@ -66,11 +64,11 @@ namespace NFig.Redis
             int dbIndex,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
             )
+            : base(new SettingsFactory<TSettings, TTier, TDataCenter>(additionalDefaultConverters))
         {
             _redis = redisConnection;
             _subscriber = _redis.GetSubscriber();
             _dbIndex = dbIndex;
-            Manager = new SettingsManager<TSettings, TTier, TDataCenter>(additionalDefaultConverters);
         }
 
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
@@ -143,26 +141,16 @@ namespace NFig.Redis
             }
         }
 
-        public TSettings GetApplicationSettings(string appName, TTier tier, TDataCenter dataCenter)
-        {
-            return Task.Run(async () => { return await GetApplicationSettingsAsync(appName, tier, dataCenter); }).Result;
-        }
-
-        public async Task<TSettings> GetApplicationSettingsAsync(string appName, TTier tier, TDataCenter dataCenter)
+        public override async Task<TSettings> GetApplicationSettingsAsync(string appName, TTier tier, TDataCenter dataCenter)
         {
             var data = await GetCurrentDataAsync(appName).ConfigureAwait(false);
             return GetSettingsObjectFromData(data, tier, dataCenter);
         }
 
-        public void SetOverride(string appName, string settingName, string value, TTier tier, TDataCenter dataCenter)
-        {
-            Task.Run(async () => { await SetOverrideAsync(appName, settingName, value, tier, dataCenter); }).Wait();
-        }
-
-        public async Task SetOverrideAsync(string appName, string settingName, string value, TTier tier, TDataCenter dataCenter)
+        public override async Task SetOverrideAsync(string appName, string settingName, string value, TTier tier, TDataCenter dataCenter)
         {
             // make sure this is even valid input before saving it to Redis
-            if (!Manager.IsValidStringForSetting(settingName, value))
+            if (!IsValidStringForSetting(settingName, value))
                 throw new SettingConversionException("\"" + value + "\" is not a valid value for setting \"" + settingName + "\"");
 
             var key = GetSettingKey(settingName, tier, dataCenter);
@@ -172,12 +160,7 @@ namespace NFig.Redis
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
-        public void ClearOverride(string appName, string settingName, TTier tier, TDataCenter dataCenter)
-        {
-            Task.Run(async () => { await ClearOverrideAsync(appName, settingName, tier, dataCenter); }).Wait();
-        }
-
-        public async Task ClearOverrideAsync(string appName, string settingName, TTier tier, TDataCenter dataCenter)
+        public override async Task ClearOverrideAsync(string appName, string settingName, TTier tier, TDataCenter dataCenter)
         {
             var key = GetSettingKey(settingName, tier, dataCenter);
             var db = GetRedisDb();
@@ -196,50 +179,19 @@ namespace NFig.Redis
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
-        public bool IsCurrent(TSettings settings)
-        {
-            return Task.Run(async () => { return await IsCurrentAsync(settings); }).Result;
-        }
-
-        public async Task<bool> IsCurrentAsync(TSettings settings)
-        {
-            var commit = await GetCurrentCommitAsync(settings.ApplicationName).ConfigureAwait(false);
-            return commit == settings.SettingsCommit;
-        }
-
-        public string GetCurrentCommit(string appName)
-        {
-            return Task.Run(async () => { return await GetCurrentCommitAsync(appName); }).Result;
-        }
-
-        public async Task<string> GetCurrentCommitAsync(string appName)
+        public override async Task<string> GetCurrentCommitAsync(string appName)
         {
             var db = GetRedisDb();
             return await db.HashGetAsync(appName, COMMIT_KEY).ConfigureAwait(false);
         }
 
-        public bool SettingExists(string settingName)
-        {
-            return Manager.SettingExists(settingName);
-        }
-
-        public SettingInfo<TTier, TDataCenter>[] GetAllSettingInfos(string appName)
-        {
-            return Task.Run(async () => { return await GetAllSettingInfosAsync(appName); }).Result;
-        }
-
-        public async Task<SettingInfo<TTier, TDataCenter>[]> GetAllSettingInfosAsync(string appName)
+        public override async Task<SettingInfo<TTier, TDataCenter>[]> GetAllSettingInfosAsync(string appName)
         {
             var data = await GetCurrentDataAsync(appName).ConfigureAwait(false);
-            return Manager.GetAllSettingInfos(data.Overrides);
+            return Factory.GetAllSettingInfos(data.Overrides);
         }
 
-        public SettingInfo<TTier, TDataCenter> GetSettingInfo(string appName, string settingName)
-        {
-            return Task.Run(async () => { return await GetSettingInfoAsync(appName, settingName); }).Result;
-        }
-
-        public async Task<SettingInfo<TTier, TDataCenter>> GetSettingInfoAsync(string appName, string settingName)
+        public override async Task<SettingInfo<TTier, TDataCenter>> GetSettingInfoAsync(string appName, string settingName)
         {
             // todo: should probably call GetAllSettingInfosAsync and have it perform caching rather than redoing work and reproducing logic in this method
             SettingInfoData data;
@@ -254,7 +206,8 @@ namespace NFig.Redis
 
             data = new SettingInfoData();
             var redisData = await GetCurrentDataAsync(appName).ConfigureAwait(false);
-            data.InfoBySetting = Manager.GetAllSettingInfos(redisData.Overrides).ToDictionary(s => s.Name);
+            data.Commit = redisData.Commit;
+            data.InfoBySetting = Factory.GetAllSettingInfos(redisData.Overrides).ToDictionary(s => s.Name);
 
             lock (_infoCacheLock)
             {
@@ -262,11 +215,6 @@ namespace NFig.Redis
             }
 
             return data.InfoBySetting[settingName];
-        }
-
-        public bool IsValidStringForSetting(string settingName, string str)
-        {
-            return Manager.IsValidStringForSetting(settingName, str);
         }
 
         // ReSharper disable once StaticMemberInGenericType
@@ -327,9 +275,9 @@ namespace NFig.Redis
         private TSettings GetSettingsObjectFromData(RedisAppData data, TTier tier, TDataCenter dataCenter)
         {
             // create new settings object
-            var settings = Manager.GetAppSettings(tier, dataCenter, data.Overrides);
+            var settings = Factory.GetAppSettings(tier, dataCenter, data.Overrides);
             settings.ApplicationName = data.ApplicationName;
-            settings.SettingsCommit = data.Commit;
+            settings.Commit = data.Commit;
             return settings;
         }
 
