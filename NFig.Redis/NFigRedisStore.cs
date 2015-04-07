@@ -47,7 +47,7 @@ namespace NFig.Redis
 
         public NFigRedisStore(
             string redisConnectionString, 
-            int dbIndex,
+            int dbIndex = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
             )
         : this (
@@ -61,7 +61,7 @@ namespace NFig.Redis
         // The reason this constructor is private and there is a public static method wrapper is so the calling dll isn't required to reference to SE.Redis.
         private NFigRedisStore(
             ConnectionMultiplexer redisConnection, 
-            int dbIndex,
+            int dbIndex = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
             )
             : base(new SettingsFactory<TSettings, TTier, TDataCenter>(additionalDefaultConverters))
@@ -73,7 +73,7 @@ namespace NFig.Redis
 
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
             ConnectionMultiplexer redisConnection,
-            int db,
+            int db = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
             )
         {
