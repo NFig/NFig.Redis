@@ -366,7 +366,7 @@ namespace NFig.Redis
         }
 
         private bool _disposed;
-        public virtual void Dispose(bool disposing)
+        protected virtual void Dispose(bool disposing)
         {
             if (_disposed)
                 return;
