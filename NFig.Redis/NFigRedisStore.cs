@@ -8,7 +8,7 @@ using StackExchange.Redis;
 
 namespace NFig.Redis
 {
-    public class NFigRedisStore<TSettings, TTier, TDataCenter> : NFigAsyncStore<TSettings, TTier, TDataCenter>
+    public class NFigRedisStore<TSettings, TTier, TDataCenter> : NFigAsyncStore<TSettings, TTier, TDataCenter>, IDisposable
         where TSettings : class, INFigSettings<TTier, TDataCenter>, new()
         where TTier : struct
         where TDataCenter : struct
@@ -357,6 +357,24 @@ namespace NFig.Redis
         {
             public string Commit { get; set; }
             public Dictionary<string, SettingInfo<TTier, TDataCenter>> InfoBySetting { get; set; }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private bool _disposed;
+        public virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+                _redis.Dispose();
+
+            _disposed = true;
         }
     }
 }
