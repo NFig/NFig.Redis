@@ -223,10 +223,12 @@ namespace NFig.Redis
         {
             RedisAppData data;
 
+            var firstTimeLoad = true;
             // check cache first
             // ReSharper disable once InconsistentlySynchronizedField
             if (_dataCache.TryGetValue(appName, out data))
             {
+                firstTimeLoad = false;
                 var commit = await GetCurrentCommitAsync(appName).ConfigureAwait(false);
                 if (data.Commit == commit)
                     return data;
@@ -269,7 +271,22 @@ namespace NFig.Redis
                 _dataCache[appName] = data;
             }
 
+            if (firstTimeLoad)
+                DeleteOrphanedOverrides(data);
+
             return data;
+        }
+
+        private void DeleteOrphanedOverrides(RedisAppData data)
+        {
+            var db = GetRedisDb();
+            foreach (var over in data.Overrides)
+            {
+                if (!Factory.SettingExists(over.Name))
+                {
+                    db.HashDelete(data.ApplicationName, GetSettingKey(over.Name, over.Tier, over.DataCenter), CommandFlags.DemandMaster | CommandFlags.FireAndForget);
+                }
+            }
         }
 
         private TSettings GetSettingsObjectFromData(RedisAppData data, TTier tier, TDataCenter dataCenter)
