@@ -98,10 +98,13 @@ namespace NFig.Redis
                 }
                 else
                 {
-                    _callbacksByApp[appName] = new List<TierDataCenterCallback>();
+                    if (_callbacksByApp.Count == 0)
+                    {
+                        // set up a redis subscription if this is the first app subscription
+                        _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
+                    }
 
-                    // set up a redis subscription
-                    _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
+                    _callbacksByApp[appName] = new List<TierDataCenterCallback>();
                 }
 
                 _callbacksByApp[appName].Add(info);
@@ -172,7 +175,7 @@ namespace NFig.Redis
             if (!committed)
                 throw new NFigException("Unable to clear override. Redis Transaction failed. " + appName + "." + settingName);
 
-            // not sure if these actually need to be awaited after ExecuteAwait finishes
+            // not sure if these actually need to be awaited after ExecuteAsync finishes
             await delTask.ConfigureAwait(false);
             await setTask.ConfigureAwait(false);
 
