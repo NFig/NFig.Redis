@@ -32,8 +32,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="NFig, Version=1.0.0.27, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\NFig.1.0.1-unstable27\lib\net45\NFig.dll</HintPath>
+    <Reference Include="NFig, Version=1.0.0.28, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NFig.1.0.1-unstable28\lib\net45\NFig.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
