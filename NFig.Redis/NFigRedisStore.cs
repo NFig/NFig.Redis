@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -154,7 +154,13 @@ namespace NFig.Redis
         {
             // make sure this is even valid input before saving it to Redis
             if (!IsValidStringForSetting(settingName, value))
-                throw new SettingConversionException("\"" + value + "\" is not a valid value for setting \"" + settingName + "\"");
+                throw new InvalidSettingValueException<TTier, TDataCenter>(
+                    "\"" + value + "\" is not a valid value for setting \"" + settingName + "\"",
+                    settingName,
+                    value, 
+                    false,
+                    tier,
+                    dataCenter);
 
             var key = GetSettingKey(settingName, tier, dataCenter);
             var db = GetRedisDb();
