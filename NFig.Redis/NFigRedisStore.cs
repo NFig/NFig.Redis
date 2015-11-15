@@ -82,10 +82,11 @@ namespace NFig.Redis
 
         public void SubscribeToAppSettings(string appName, TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback, bool overrideExisting = false)
         {
+            List<TierDataCenterCallback> callbackListCopy;
             lock (_callbacksLock)
             {
-                var info = new TierDataCenterCallback(tier, dataCenter, callback);
                 List<TierDataCenterCallback> callbackList;
+                var info = new TierDataCenterCallback(tier, dataCenter, callback);
                 if (_callbacksByApp.TryGetValue(appName, out callbackList))
                 {
                     var existing = callbackList.FirstOrDefault(tdc => tdc.Tier.Equals(tier) && tdc.DataCenter.Equals(dataCenter));
@@ -104,11 +105,15 @@ namespace NFig.Redis
                         _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
                     }
 
-                    _callbacksByApp[appName] = new List<TierDataCenterCallback>();
+                    callbackList = new List<TierDataCenterCallback>();
+                    _callbacksByApp[appName] = callbackList;
                 }
 
                 _callbacksByApp[appName].Add(info);
+                callbackListCopy = new List<TierDataCenterCallback>(callbackList);
             }
+
+            ReloadAndNotifyCallback(appName, callbackListCopy);
         }
 
         /// <summary>
