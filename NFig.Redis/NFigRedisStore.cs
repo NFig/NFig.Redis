@@ -165,7 +165,7 @@ namespace NFig.Redis
             var key = GetSettingKey(settingName, tier, dataCenter);
             var db = GetRedisDb();
 
-            await db.HashSetAsync(appName, new [] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, GetCommit()) }).ConfigureAwait(false);
+            await db.HashSetAsync(appName, new [] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, CreateNewCommit()) }).ConfigureAwait(false);
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
@@ -176,7 +176,7 @@ namespace NFig.Redis
 
             var tran = db.CreateTransaction();
             var delTask = tran.HashDeleteAsync(appName, key);
-            var setTask = tran.HashSetAsync(appName, COMMIT_KEY, GetCommit());
+            var setTask = tran.HashSetAsync(appName, COMMIT_KEY, CreateNewCommit());
             var committed = await tran.ExecuteAsync().ConfigureAwait(false);
             if (!committed)
                 throw new NFigException("Unable to clear override. Redis Transaction failed. " + appName + "." + settingName);
@@ -369,7 +369,7 @@ namespace NFig.Redis
             return ":" + Convert.ToUInt32(tier) + ":" + Convert.ToUInt32(dataCenter) + ";" + settingName;
         }
 
-        private static string GetCommit()
+        private static string CreateNewCommit()
         {
             return Guid.NewGuid().ToString();
         }
