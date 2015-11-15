@@ -311,11 +311,18 @@ namespace NFig.Redis
         {
             if (channel == APP_UPDATE_CHANNEL)
             {
-                List<TierDataCenterCallback> callbacks;
-                if (_callbacksByApp.TryGetValue(message, out callbacks))
+                List<TierDataCenterCallback> callbacksCopy = null;
+                lock (_callbacksLock)
                 {
-                    ReloadAndNotifyCallback(message, callbacks);
+                    List<TierDataCenterCallback> callbacks;
+                    if (_callbacksByApp.TryGetValue(message, out callbacks))
+                    {
+                        callbacksCopy = new List<TierDataCenterCallback>(callbacks);
+                    }
                 }
+
+                if (callbacksCopy != null)
+                    ReloadAndNotifyCallback(message, callbacksCopy);
             }
         }
 
