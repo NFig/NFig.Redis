@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using StackExchange.Redis;
 
@@ -20,6 +21,7 @@ namespace NFig.Redis
             public TTier Tier { get; }
             public TDataCenter DataCenter { get; }
             public SettingsUpdateDelegate Callback { get; }
+            public string LastNotifiedCommit { get; set; } = "NONE";
 
             public TierDataCenterCallback(TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback)
             {
@@ -36,6 +38,8 @@ namespace NFig.Redis
         private readonly ISubscriber _subscriber;
         private readonly int _dbIndex;
 
+        private Timer _contingencyPollingTimer;
+
         private readonly object _callbacksLock = new object();
         private readonly Dictionary<string, List<TierDataCenterCallback>> _callbacksByApp = new Dictionary<string, List<TierDataCenterCallback>>();
 
@@ -45,15 +49,19 @@ namespace NFig.Redis
         private readonly object _infoCacheLock = new object();
         private readonly Dictionary<string, SettingInfoData> _infoCache = new Dictionary<string, SettingInfoData>();
 
+        public int ContingencyPollingInterval { get; }
+
         public NFigRedisStore(
             string redisConnectionString, 
             int dbIndex = 0,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
+            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
+            int contingencyPollingInterval = 60
             )
         : this (
             ConnectionMultiplexer.Connect(redisConnectionString),
             dbIndex,
-            additionalDefaultConverters
+            additionalDefaultConverters,
+            contingencyPollingInterval
         )
         {
         }
@@ -61,23 +69,26 @@ namespace NFig.Redis
         // The reason this constructor is private and there is a public static method wrapper is so the calling dll isn't required to reference to SE.Redis.
         private NFigRedisStore(
             ConnectionMultiplexer redisConnection, 
-            int dbIndex = 0,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
+            int dbIndex,
+            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters,
+            int contingencyPollingInterval
             )
             : base(new SettingsFactory<TSettings, TTier, TDataCenter>(additionalDefaultConverters))
         {
             _redis = redisConnection;
             _subscriber = _redis.GetSubscriber();
             _dbIndex = dbIndex;
+            ContingencyPollingInterval = contingencyPollingInterval;
         }
 
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
             ConnectionMultiplexer redisConnection,
             int db = 0,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null
+            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
+            int contingencyPollingInterval = 60
             )
         {
-            return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters);
+            return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters, contingencyPollingInterval);
         }
 
         public void SubscribeToAppSettings(string appName, TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback, bool overrideExisting = false)
@@ -101,8 +112,8 @@ namespace NFig.Redis
                 {
                     if (_callbacksByApp.Count == 0)
                     {
-                        // set up a redis subscription if this is the first app subscription
-                        _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
+                        // set up a subscription if this is the first app subscription
+                        BeginSubscription();
                     }
 
                     callbackList = new List<TierDataCenterCallback>();
@@ -312,22 +323,53 @@ namespace NFig.Redis
             return settings;
         }
 
+        private void BeginSubscription()
+        {
+            _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
+
+            // also start polling for changes in case pub/sub fails
+            _contingencyPollingTimer = new Timer(PollForChanges, null, ContingencyPollingInterval * 1000, ContingencyPollingInterval * 1000);
+        }
+
+        private void PollForChanges(object _)
+        {
+            List<string> appNames;
+            lock (_callbacksLock)
+            {
+                appNames = new List<string>(_callbacksByApp.Count);
+                foreach (var name in _callbacksByApp.Keys)
+                {
+                    appNames.Add(name);
+                }
+            }
+
+            foreach (var name in appNames)
+            {
+                var commit = GetCurrentCommit(name);
+
+                var notify = true;
+                RedisAppData data;
+                if (_dataCache.TryGetValue(name, out data))
+                {
+                    notify = data.Commit != commit;
+                }
+
+                if (notify)
+                {
+                    var callbacks = GetCallbacksCopy(name);
+                    ReloadAndNotifyCallback(name, callbacks);
+                }
+            }
+        }
+
         private void OnAppUpdate(RedisChannel channel, RedisValue message)
         {
             if (channel == APP_UPDATE_CHANNEL)
             {
-                List<TierDataCenterCallback> callbacksCopy = null;
-                lock (_callbacksLock)
-                {
-                    List<TierDataCenterCallback> callbacks;
-                    if (_callbacksByApp.TryGetValue(message, out callbacks))
-                    {
-                        callbacksCopy = new List<TierDataCenterCallback>(callbacks);
-                    }
-                }
+                var callbacks = GetCallbacksCopy(message);
 
-                if (callbacksCopy != null)
-                    ReloadAndNotifyCallback(message, callbacksCopy);
+                if (callbacks.Count > 0)
+                    ReloadAndNotifyCallback(message, callbacks);
             }
         }
 
@@ -340,7 +382,7 @@ namespace NFig.Redis
             RedisAppData data = null;
             try
             {
-                data = Task.Run(async () => { return await GetCurrentDataAsync(appName); }).Result;
+                data = Task.Run(async () => await GetCurrentDataAsync(appName) ).Result;
             }
             catch(Exception e)
             {
@@ -352,21 +394,39 @@ namespace NFig.Redis
                 if (c.Callback == null)
                     continue;
 
+                if (data != null && data.Commit == c.LastNotifiedCommit)
+                    continue;
+
                 TSettings settings = null;
                 Exception inner = null;
-                try
+                if (ex == null)
                 {
-                    if (ex == null)
+                    try
+                    {
                         settings = GetSettingsObjectFromData(data, c.Tier, c.DataCenter);
-                }
-                catch (Exception e)
-                {
-                    inner = e;
+                        c.LastNotifiedCommit = data.Commit;
+                    }
+                    catch (Exception e)
+                    {
+                        inner = e;
+                    }
                 }
 
                 c.Callback(ex ?? inner, settings, this);
             }
+        }
 
+        private List<TierDataCenterCallback> GetCallbacksCopy(string appName)
+        {
+            List<TierDataCenterCallback> copy = null;
+            lock (_callbacksLock)
+            {
+                List<TierDataCenterCallback> callbacks;
+                if (_callbacksByApp.TryGetValue(appName, out callbacks))
+                    copy = new List<TierDataCenterCallback>(callbacks);
+            }
+
+            return copy ?? new List<TierDataCenterCallback>();
         }
 
         private static string GetSettingKey(string settingName, TTier tier, TDataCenter dataCenter)
@@ -410,7 +470,12 @@ namespace NFig.Redis
                 return;
 
             if (disposing)
+            {
                 _redis.Dispose();
+
+                var t = _contingencyPollingTimer;
+                t?.Dispose();
+            }
 
             _disposed = true;
         }
