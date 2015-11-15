@@ -41,7 +41,7 @@ namespace NFig.Redis
         private Timer _contingencyPollingTimer;
 
         private readonly object _callbacksLock = new object();
-        private readonly Dictionary<string, List<TierDataCenterCallback>> _callbacksByApp = new Dictionary<string, List<TierDataCenterCallback>>();
+        private readonly Dictionary<string, TierDataCenterCallback[]> _callbacksByApp = new Dictionary<string, TierDataCenterCallback[]>();
 
         private readonly object _dataCacheLock = new object();
         private readonly Dictionary<string, RedisAppData> _dataCache = new Dictionary<string, RedisAppData>();
@@ -91,22 +91,26 @@ namespace NFig.Redis
             return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters, contingencyPollingInterval);
         }
 
-        public void SubscribeToAppSettings(string appName, TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback, bool overrideExisting = false)
+        public void SubscribeToAppSettings(string appName, TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback)
         {
-            List<TierDataCenterCallback> callbackListCopy;
+            TierDataCenterCallback[] callbacks;
             lock (_callbacksLock)
             {
-                List<TierDataCenterCallback> callbackList;
                 var info = new TierDataCenterCallback(tier, dataCenter, callback);
-                if (_callbacksByApp.TryGetValue(appName, out callbackList))
+                if (_callbacksByApp.TryGetValue(appName, out callbacks))
                 {
-                    var existing = callbackList.FirstOrDefault(tdc => tdc.Tier.Equals(tier) && tdc.DataCenter.Equals(dataCenter));
-
-                    if (existing != null)
+                    foreach (var c in callbacks)
                     {
-                        if (callback == existing.Callback)
-                            return;
+                        if (c.Tier.Equals(tier) && c.DataCenter.Equals(dataCenter) && c.Callback == callback)
+                            return; // callback already exists, no need to add it again
                     }
+
+                    var oldCallbacks = callbacks;
+                    callbacks = new TierDataCenterCallback[oldCallbacks.Length + 1];
+                    Array.Copy(oldCallbacks, callbacks, oldCallbacks.Length);
+                    callbacks[oldCallbacks.Length] = info;
+
+                    _callbacksByApp[appName] = callbacks;
                 }
                 else
                 {
@@ -116,15 +120,12 @@ namespace NFig.Redis
                         BeginSubscription();
                     }
 
-                    callbackList = new List<TierDataCenterCallback>();
-                    _callbacksByApp[appName] = callbackList;
+                    callbacks = new [] { info };
+                    _callbacksByApp[appName] = callbacks;
                 }
-
-                _callbacksByApp[appName].Add(info);
-                callbackListCopy = new List<TierDataCenterCallback>(callbackList);
             }
 
-            ReloadAndNotifyCallback(appName, callbackListCopy);
+            ReloadAndNotifyCallback(appName, callbacks);
         }
 
         /// <summary>
@@ -134,16 +135,17 @@ namespace NFig.Redis
         /// <param name="appName">The name of the app.</param>
         /// <param name="tier"></param>
         /// <param name="dataCenter"></param>
-        /// <param name="callback">(optional) If null, any callback will be removed. If specified, the current callback will only be removed if it is equal to this param.</param>
+        /// <param name="callback">(optional) If null, any callback will be removed. If specified, a current callback will only be removed if it is equal to this param.</param>
         /// <returns>True if a callback was removed, otherwise false.</returns>
         public bool UnsubscribeFromAppSettings(string appName, TTier? tier = null, TDataCenter? dataCenter = null, SettingsUpdateDelegate callback = null)
         {
             lock (_callbacksLock)
             {
                 var removedAny = false;
-                List<TierDataCenterCallback> callbackList;
-                if (_callbacksByApp.TryGetValue(appName, out callbackList))
+                TierDataCenterCallback[] callbacks;
+                if (_callbacksByApp.TryGetValue(appName, out callbacks))
                 {
+                    var callbackList = new List<TierDataCenterCallback>(callbacks);
                     for (var i = callbackList.Count - 1; i >= 0; i--)
                     {
                         var c = callbackList[i];
@@ -154,6 +156,9 @@ namespace NFig.Redis
                             removedAny = true;
                         }
                     }
+
+                    if (removedAny)
+                        _callbacksByApp[appName] = callbackList.ToArray();
                 }
 
                 return removedAny;
@@ -356,8 +361,7 @@ namespace NFig.Redis
 
                 if (notify)
                 {
-                    var callbacks = GetCallbacksCopy(name);
-                    ReloadAndNotifyCallback(name, callbacks);
+                    ReloadAndNotifyCallback(name, GetCallbacks(name));
                 }
             }
         }
@@ -366,16 +370,13 @@ namespace NFig.Redis
         {
             if (channel == APP_UPDATE_CHANNEL)
             {
-                var callbacks = GetCallbacksCopy(message);
-
-                if (callbacks.Count > 0)
-                    ReloadAndNotifyCallback(message, callbacks);
+                ReloadAndNotifyCallback(message, GetCallbacks(message));
             }
         }
 
-        private void ReloadAndNotifyCallback(string appName, List<TierDataCenterCallback> callbacks)
+        private void ReloadAndNotifyCallback(string appName, TierDataCenterCallback[] callbacks)
         {
-            if (callbacks == null || callbacks.Count == 0)
+            if (callbacks == null || callbacks.Length == 0)
                 return;
 
             Exception ex = null;
@@ -416,17 +417,13 @@ namespace NFig.Redis
             }
         }
 
-        private List<TierDataCenterCallback> GetCallbacksCopy(string appName)
+        private TierDataCenterCallback[] GetCallbacks(string appName)
         {
-            List<TierDataCenterCallback> copy = null;
-            lock (_callbacksLock)
-            {
-                List<TierDataCenterCallback> callbacks;
-                if (_callbacksByApp.TryGetValue(appName, out callbacks))
-                    copy = new List<TierDataCenterCallback>(callbacks);
-            }
+            TierDataCenterCallback[] callbacks;
+            if (_callbacksByApp.TryGetValue(appName, out callbacks))
+                return callbacks;
 
-            return copy ?? new List<TierDataCenterCallback>();
+            return new TierDataCenterCallback[0];
         }
 
         private static string GetSettingKey(string settingName, TTier tier, TDataCenter dataCenter)
