@@ -136,12 +136,12 @@ namespace NFig.Redis
         /// <param name="tier"></param>
         /// <param name="dataCenter"></param>
         /// <param name="callback">(optional) If null, any callback will be removed. If specified, a current callback will only be removed if it is equal to this param.</param>
-        /// <returns>True if a callback was removed, otherwise false.</returns>
-        public bool UnsubscribeFromAppSettings(string appName, TTier? tier = null, TDataCenter? dataCenter = null, SettingsUpdateDelegate callback = null)
+        /// <returns>The number of callbacks removed.</returns>
+        public int UnsubscribeFromAppSettings(string appName, TTier? tier = null, TDataCenter? dataCenter = null, SettingsUpdateDelegate callback = null)
         {
             lock (_callbacksLock)
             {
-                var removedAny = false;
+                var removedCount = 0;
                 TierDataCenterCallback[] callbacks;
                 if (_callbacksByApp.TryGetValue(appName, out callbacks))
                 {
@@ -153,15 +153,15 @@ namespace NFig.Redis
                         if ((tier == null || c.Tier.Equals(tier.Value)) && (dataCenter == null || c.DataCenter.Equals(dataCenter.Value)) && (callback == null || c.Callback == callback))
                         {
                             callbackList.RemoveAt(i);
-                            removedAny = true;
+                            removedCount++;
                         }
                     }
 
-                    if (removedAny)
+                    if (removedCount > 0)
                         _callbacksByApp[appName] = callbackList.ToArray();
                 }
 
-                return removedAny;
+                return removedCount;
             }
         }
 
