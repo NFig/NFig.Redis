@@ -165,7 +165,7 @@ namespace NFig.Redis
             }
         }
 
-        public override async Task<TSettings> GetApplicationSettingsAsync(string appName, TTier tier, TDataCenter dataCenter)
+        public override async Task<TSettings> GetAppSettingsAsync(string appName, TTier tier, TDataCenter dataCenter)
         {
             var data = await GetCurrentDataAsync(appName).ConfigureAwait(false);
             return GetSettingsObjectFromData(data, tier, dataCenter);
