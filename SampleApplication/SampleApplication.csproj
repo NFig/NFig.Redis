@@ -33,7 +33,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="NFig, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\NFig.1.0.1-unstable32\lib\net45\NFig.dll</HintPath>
+      <HintPath>..\packages\NFig.1.0.1-unstable33\lib\net45\NFig.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
