@@ -50,18 +50,21 @@ namespace NFig.Redis
         private readonly Dictionary<string, SettingInfoData> _infoCache = new Dictionary<string, SettingInfoData>();
 
         public int ContingencyPollingInterval { get; }
+        public string RedisKeyPrefix { get; }
 
         public NFigRedisStore(
             string redisConnectionString, 
             int dbIndex = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
-            int contingencyPollingInterval = 60
+            int contingencyPollingInterval = 60,
+            string redisKeyPrefix = "NFig:"
             )
         : this (
             ConnectionMultiplexer.Connect(redisConnectionString),
             dbIndex,
             additionalDefaultConverters,
-            contingencyPollingInterval
+            contingencyPollingInterval,
+            redisKeyPrefix
         )
         {
         }
@@ -71,7 +74,8 @@ namespace NFig.Redis
             ConnectionMultiplexer redisConnection, 
             int dbIndex,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters,
-            int contingencyPollingInterval
+            int contingencyPollingInterval,
+            string redisKeyPrefix
             )
             : base(new SettingsFactory<TSettings, TTier, TDataCenter>(additionalDefaultConverters))
         {
@@ -79,16 +83,18 @@ namespace NFig.Redis
             _subscriber = _redis.GetSubscriber();
             _dbIndex = dbIndex;
             ContingencyPollingInterval = contingencyPollingInterval;
+            RedisKeyPrefix = redisKeyPrefix;
         }
 
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
             ConnectionMultiplexer redisConnection,
             int db = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
-            int contingencyPollingInterval = 60
+            int contingencyPollingInterval = 60,
+            string redisKeyPrefix = "NFig:"
             )
         {
-            return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters, contingencyPollingInterval);
+            return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters, contingencyPollingInterval, redisKeyPrefix);
         }
 
         public void SubscribeToAppSettings(string appName, TTier tier, TDataCenter dataCenter, SettingsUpdateDelegate callback)
@@ -186,7 +192,7 @@ namespace NFig.Redis
             var key = GetSettingKey(settingName, tier, dataCenter);
             var db = GetRedisDb();
 
-            await db.HashSetAsync(appName, new [] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, CreateNewCommit()) }).ConfigureAwait(false);
+            await db.HashSetAsync(GetRedisHashName(appName), new [] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, CreateNewCommit()) }).ConfigureAwait(false);
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
@@ -195,9 +201,10 @@ namespace NFig.Redis
             var key = GetSettingKey(settingName, tier, dataCenter);
             var db = GetRedisDb();
 
+            var hashName = GetRedisHashName(appName);
             var tran = db.CreateTransaction();
-            var delTask = tran.HashDeleteAsync(appName, key);
-            var setTask = tran.HashSetAsync(appName, COMMIT_KEY, CreateNewCommit());
+            var delTask = tran.HashDeleteAsync(hashName, key);
+            var setTask = tran.HashSetAsync(hashName, COMMIT_KEY, CreateNewCommit());
             var committed = await tran.ExecuteAsync().ConfigureAwait(false);
             if (!committed)
                 throw new NFigException("Unable to clear override. Redis Transaction failed. " + appName + "." + settingName);
@@ -212,7 +219,7 @@ namespace NFig.Redis
         public override async Task<string> GetCurrentCommitAsync(string appName)
         {
             var db = GetRedisDb();
-            return await db.HashGetAsync(appName, COMMIT_KEY).ConfigureAwait(false);
+            return await db.HashGetAsync(GetRedisHashName(appName), COMMIT_KEY).ConfigureAwait(false);
         }
 
         public override async Task<SettingInfo<TTier, TDataCenter>[]> GetAllSettingInfosAsync(string appName)
@@ -272,7 +279,7 @@ namespace NFig.Redis
 
             // grab the redis hash
             var db = GetRedisDb();
-            var hash = await db.HashGetAllAsync(appName).ConfigureAwait(false);
+            var hash = await db.HashGetAllAsync(GetRedisHashName(appName)).ConfigureAwait(false);
 
             var overrides = new List<SettingValue<TTier, TDataCenter>>();
             foreach (var hashEntry in hash)
@@ -314,7 +321,8 @@ namespace NFig.Redis
             {
                 if (!Factory.SettingExists(over.Name))
                 {
-                    db.HashDelete(data.ApplicationName, GetSettingKey(over.Name, over.Tier, over.DataCenter), CommandFlags.DemandMaster | CommandFlags.FireAndForget);
+                    var hashName = GetRedisHashName(data.ApplicationName);
+                    db.HashDelete(hashName, GetSettingKey(over.Name, over.Tier, over.DataCenter), CommandFlags.DemandMaster | CommandFlags.FireAndForget);
                 }
             }
         }
@@ -439,6 +447,11 @@ namespace NFig.Redis
         private IDatabase GetRedisDb()
         {
             return _redis.GetDatabase(_dbIndex);
+        }
+
+        private string GetRedisHashName(string appName)
+        {
+            return RedisKeyPrefix + appName;
         }
 
         private class RedisAppData
