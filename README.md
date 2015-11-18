@@ -5,7 +5,65 @@
 
 NFig.Redis is a configuration/settings library which uses Redis to store configuration overrides and receive live-update notifications. It is built on top of [NFig](https://github.com/NFig/NFig).
 
-For documentation on how to use NFig.Redis, see the [Sample Web Application](https://github.com/NFig/SampleWebApplication).
+## Basic Usage
+
+> This assumes you already understand how to create a [settings class](https://github.com/NFig/SampleWebApplication#settings-class) and enums for [tier and data center](https://github.com/NFig/SampleWebApplication#tier-and-data-center). Follow those links first if you're unfamiliar.
+
+Simply create a new instance of `NFigRedisStore` and subscribe to updates on the application, tier, and data center you care about.
+
+```csharp
+var nfig = new NFigRedisStore<Settings, Tier, DataCenter>("localhost:6379");
+nfig.SubscribeToAppSettings("AppName", tier, dc, OnSettingsUpdate);
+```
+
+We also need to create the callback method:
+
+```csharp
+void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings, TTier, TDataCenter> nfigRedisStore)
+{
+	if (ex != null)
+	{
+		// couldn't load the settings
+		LogException(ex);
+		return;
+	}
+	
+	CurrentSettings = settings;
+}
+```
+
+That's all you need for a simple case, but maybe we want to expand our error handling a little bit to make our app more resilient against potentially bad override values:
+
+```csharp
+void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings, TTier, TDataCenter> nfigRedisStore)
+{
+	if (ex != null)
+	{
+		// check if we have invalid overrides
+		var invalid = ex as InvalidSettingOverridesException<Tier, DataCenter>;
+		if (invalid != null)
+		{
+			LogException(invalid);
+			
+			// let's automatically clear the bad overrides (you may or may not want to do this automatically)
+			foreach (var o in invalid.Exceptions)
+			{
+				nfigRedisStore.ClearOverride(settings.ApplicationName, o.SettingName, o.Tier, o.DataCenter);
+			}
+		}
+		else
+		{
+			// couldn't load the settings
+			LogException(ex);
+			return;
+		}
+	}
+	
+	CurrentSettings = settings;
+}
+```
+
+That's all you really need to get up and running.
 
 ## Changes in 2.0
 
