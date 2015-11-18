@@ -33,6 +33,16 @@ If a callback is added (not a duplicate), then the provided callback will be cal
 
 Previously, the application name was used as the key name for storing overrides in Redis. Now, a prefix is included in the name (default is "NFig:"). This means, if you have existing overrides, you either need to rename the existing hash in Redis to include the prefix, or you can set the prefix to an empty string using the optional `redisKeyPrefix` constructor argument.
 
+#### Invalid Override Protection
+
+Although overrides are always validated at the time they are set, there are still scenarios where it's possible to have an invalid override (such as if you changed the setting property type while an override was live) which could cause settings to not load. For many apps, settings not loading may mean the entire app is down, and if the app is down, it becomes difficult to edit overrides.
+
+To avoid this catch-22, NFig.Redis will substitute in default values when it can't apply an override (via NFig's new `TryGetAppSettings` method). If that happens, the first argument to the subscription callback will be a `InvalidSettingOverridesException`, but the settings argument will still be a valid `TSettings` object.
+
+It's your choice what to do with this information. Automatically clearing the bad values and/or alerting humans to the problem are good suggestions. More detail about the invalid overrides can be found via the `InvalidSettingOverridesException.Exceptions` property which is an `IList<InvalidSettingValueException<TTier, TDataCenter>>` (see [NFig/Exceptions.cs](https://github.com/NFig/NFig/blob/master/NFig/Exceptions.cs)). Each exception in the list represents data about an invalid override.
+
+> The `settings` argument is only guaranteed to be usable if the first argument (`Exception ex`) is either null or of type `InvalidSettingOverridesException<TTier, TDataCenter>` where `TTier` and `TDataCenter` match the type arguments used when instantiating NFig/NFigRedisStore. If `ex` is not null and of another type, you must consider the `settings` argument to be unreliable, regardless of whether or not it is null.
+
 #### UnsubscribeFromAppSettings Returns Count
 
 Although I'm not sure why you'd even use this method, it now returns a count of how many callbacks were removed rather than simply a boolean  `removedAny`.
