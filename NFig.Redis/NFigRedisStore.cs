@@ -174,7 +174,13 @@ namespace NFig.Redis
         public override async Task<TSettings> GetAppSettingsAsync(string appName, TTier tier, TDataCenter dataCenter)
         {
             var data = await GetCurrentDataAsync(appName).ConfigureAwait(false);
-            return GetSettingsObjectFromData(data, tier, dataCenter);
+
+            TSettings settings;
+            var ex = GetSettingsObjectFromData(data, tier, dataCenter, out settings);
+            if (ex != null)
+                throw ex;
+
+            return settings;
         }
 
         public override async Task SetOverrideAsync(string appName, string settingName, string value, TTier tier, TDataCenter dataCenter)
@@ -327,13 +333,14 @@ namespace NFig.Redis
             }
         }
 
-        private TSettings GetSettingsObjectFromData(RedisAppData data, TTier tier, TDataCenter dataCenter)
+        private InvalidSettingOverridesException<TTier, TDataCenter> GetSettingsObjectFromData(RedisAppData data, TTier tier, TDataCenter dataCenter, out TSettings settings)
         {
             // create new settings object
-            var settings = Factory.GetAppSettings(tier, dataCenter, data.Overrides);
+            var ex = Factory.TryGetAppSettings(out settings, tier, dataCenter, data.Overrides);
             settings.ApplicationName = data.ApplicationName;
             settings.Commit = data.Commit;
-            return settings;
+
+            return ex;
         }
 
         private void BeginSubscription()
@@ -412,7 +419,7 @@ namespace NFig.Redis
                 {
                     try
                     {
-                        settings = GetSettingsObjectFromData(data, c.Tier, c.DataCenter);
+                        ex = GetSettingsObjectFromData(data, c.Tier, c.DataCenter, out settings);
                         c.LastNotifiedCommit = data.Commit;
                     }
                     catch (Exception e)
