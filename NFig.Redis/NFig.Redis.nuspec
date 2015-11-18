@@ -13,5 +13,9 @@
     <releaseNotes></releaseNotes>
     <copyright>Copyright 2015</copyright>
     <tags>Settings Config Configuration Distributed Redis</tags>
+    <dependencies>
+      <dependency id="StackExchange.Redis" version="1.0.450"/>
+      <dependency id="NFig" version="2.0.0"/>
+    </dependencies>
   </metadata>
 </package>
