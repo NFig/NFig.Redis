@@ -260,6 +260,26 @@ namespace NFig.Redis
             return data.InfoBySetting[settingName];
         }
 
+        public Task CopySettingsFrom(string appName, string redisConnectionString, int dbIndex = 0)
+        {
+            using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
+                return CopySettings(appName, otherRedis.GetDatabase(dbIndex), GetRedisDb());
+        }
+
+        public Task CopySettingsTo(string appName, string redisConnectionString, int dbIndex = 0)
+        {
+            using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
+                return CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex));
+        }
+
+        private async Task CopySettings(string appName, IDatabaseAsync srcRedis, IDatabaseAsync dstRedis)
+        {
+            var hashName = GetRedisHashName(appName);
+            var serialized = await srcRedis.KeyDumpAsync(hashName).ConfigureAwait(false);
+            await dstRedis.KeyRestoreAsync(hashName, serialized).ConfigureAwait(false);
+            await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
+        }
+
         // ReSharper disable once StaticMemberInGenericType
         private static readonly Regex s_keyRegex = new Regex(@"^:(?<Tier>\d+):(?<DataCenter>\d+);(?<Name>.+)$");
         private async Task<RedisAppData> GetCurrentDataAsync(string appName)
