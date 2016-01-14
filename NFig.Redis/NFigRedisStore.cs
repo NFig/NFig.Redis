@@ -263,23 +263,23 @@ namespace NFig.Redis
         public async Task CopySettingsFrom(string appName, string redisConnectionString, int dbIndex = 0)
         {
             using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
-                await CopySettings(appName, otherRedis.GetDatabase(dbIndex), GetRedisDb());
+                await CopySettings(appName, otherRedis.GetDatabase(dbIndex), GetRedisDb()).ConfigureAwait(false);
         }
 
         public async Task CopySettingsTo(string appName, string redisConnectionString, int dbIndex = 0)
         {
             using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
-                await CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex));
+                await CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex)).ConfigureAwait(false);
         }
 
-        private async Task CopySettings(string appName, IDatabase srcRedis, IDatabase dstRedis)
+        private async Task CopySettings(string appName, IDatabaseAsync srcRedis, IDatabase dstRedis)
         {
             var hashName = GetRedisHashName(appName);
             var serialized = await srcRedis.KeyDumpAsync(hashName).ConfigureAwait(false);
 
             var tran = dstRedis.CreateTransaction();
-            await tran.KeyDeleteAsync(hashName, CommandFlags.DemandMaster).ConfigureAwait(false);
-            await tran.KeyRestoreAsync(hashName, serialized, flags: CommandFlags.DemandMaster).ConfigureAwait(false);
+            tran.KeyDeleteAsync(hashName);
+            tran.KeyRestoreAsync(hashName, serialized);
             await tran.ExecuteAsync(CommandFlags.DemandMaster).ConfigureAwait(false);
 
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
