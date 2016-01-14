@@ -280,7 +280,7 @@ namespace NFig.Redis
             var tran = dstRedis.CreateTransaction();
             await tran.KeyDeleteAsync(hashName, CommandFlags.DemandMaster).ConfigureAwait(false);
             await tran.KeyRestoreAsync(hashName, serialized, flags: CommandFlags.DemandMaster).ConfigureAwait(false);
-            await tran.ExecuteAsync(CommandFlags.DemandMaster);
+            await tran.ExecuteAsync(CommandFlags.DemandMaster).ConfigureAwait(false);
 
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
