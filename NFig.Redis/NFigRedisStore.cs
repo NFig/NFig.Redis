@@ -53,7 +53,7 @@ namespace NFig.Redis
         public string RedisKeyPrefix { get; }
 
         public NFigRedisStore(
-            string redisConnectionString, 
+            string redisConnectionString,
             int dbIndex = 0,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
             int contingencyPollingInterval = 60,
@@ -71,7 +71,7 @@ namespace NFig.Redis
 
         // The reason this constructor is private and there is a public static method wrapper is so the calling dll isn't required to reference to SE.Redis.
         private NFigRedisStore(
-            ConnectionMultiplexer redisConnection, 
+            ConnectionMultiplexer redisConnection,
             int dbIndex,
             Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters,
             int contingencyPollingInterval,
@@ -190,7 +190,7 @@ namespace NFig.Redis
                 throw new InvalidSettingValueException<TTier, TDataCenter>(
                     "\"" + value + "\" is not a valid value for setting \"" + settingName + "\"",
                     settingName,
-                    value, 
+                    value,
                     false,
                     tier,
                     dataCenter);
@@ -272,11 +272,16 @@ namespace NFig.Redis
                 await CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex));
         }
 
-        private async Task CopySettings(string appName, IDatabaseAsync srcRedis, IDatabaseAsync dstRedis)
+        private async Task CopySettings(string appName, IDatabase srcRedis, IDatabase dstRedis)
         {
             var hashName = GetRedisHashName(appName);
             var serialized = await srcRedis.KeyDumpAsync(hashName).ConfigureAwait(false);
-            await dstRedis.KeyRestoreAsync(hashName, serialized).ConfigureAwait(false);
+
+            var tran = dstRedis.CreateTransaction();
+            await tran.KeyDeleteAsync(hashName, CommandFlags.DemandMaster).ConfigureAwait(false);
+            await tran.KeyRestoreAsync(hashName, serialized, flags: CommandFlags.DemandMaster).ConfigureAwait(false);
+            await tran.ExecuteAsync(CommandFlags.DemandMaster);
+
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
