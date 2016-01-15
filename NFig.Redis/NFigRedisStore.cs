@@ -263,26 +263,28 @@ namespace NFig.Redis
         public async Task CopySettingsFrom(string appName, string redisConnectionString, int dbIndex = 0)
         {
             using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
-                await CopySettings(appName, otherRedis.GetDatabase(dbIndex), GetRedisDb()).ConfigureAwait(false);
+                await CopySettings(appName, otherRedis.GetDatabase(dbIndex), GetRedisDb(), _subscriber).ConfigureAwait(false);
         }
 
         public async Task CopySettingsTo(string appName, string redisConnectionString, int dbIndex = 0)
         {
             using (var otherRedis = ConnectionMultiplexer.Connect(redisConnectionString))
-                await CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex)).ConfigureAwait(false);
+                await CopySettings(appName, GetRedisDb(), otherRedis.GetDatabase(dbIndex), otherRedis.GetSubscriber()).ConfigureAwait(false);
         }
 
-        private async Task CopySettings(string appName, IDatabaseAsync srcRedis, IDatabase dstRedis)
+        private async Task CopySettings(string appName, IDatabaseAsync srcRedis, IDatabase dstRedis, ISubscriber subscriber)
         {
             var hashName = GetRedisHashName(appName);
             var serialized = await srcRedis.KeyDumpAsync(hashName).ConfigureAwait(false);
 
             var tran = dstRedis.CreateTransaction();
+#pragma warning disable 4014
             tran.KeyDeleteAsync(hashName);
             tran.KeyRestoreAsync(hashName, serialized);
+#pragma warning restore 4014
             await tran.ExecuteAsync(CommandFlags.DemandMaster).ConfigureAwait(false);
 
-            await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
+            await subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
         // ReSharper disable once StaticMemberInGenericType
