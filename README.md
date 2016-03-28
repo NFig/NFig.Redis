@@ -19,7 +19,7 @@ nfig.SubscribeToAppSettings("AppName", tier, dc, OnSettingsUpdate);
 We also need to create the callback method:
 
 ```csharp
-void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings, TTier, TDataCenter> nfigRedisStore)
+void OnSettingsUpdate(Exception ex, TSettings settings, NFigStore<TSettings, TTier, TDataCenter> nfigStore)
 {
 	if (ex != null)
 	{
@@ -35,7 +35,7 @@ void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings
 That's all you need for a simple case, but maybe we want to expand our error handling a little bit to make our app more resilient against potentially bad override values:
 
 ```csharp
-void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings, TTier, TDataCenter> nfigRedisStore)
+void OnSettingsUpdate(Exception ex, TSettings settings, NFigStore<TSettings, TTier, TDataCenter> nfigStore)
 {
 	if (ex != null)
 	{
@@ -48,7 +48,7 @@ void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings
 			// let's automatically clear the bad overrides (you may or may not want to do this automatically)
 			foreach (var o in invalid.Exceptions)
 			{
-				nfigRedisStore.ClearOverride(settings.ApplicationName, o.SettingName, o.Tier, o.DataCenter);
+				nfigStore.ClearOverride(settings.ApplicationName, o.SettingName, o.Tier, o.DataCenter);
 			}
 		}
 		else
@@ -64,6 +64,12 @@ void OnSettingsUpdate(Exception ex, TSettings settings, NFigRedisStore<TSettings
 ```
 
 That's all you really need to get up and running.
+
+## Changes in 3.0
+
+- `NFigAsyncStore` has been merged into `NFigStore` which has both synchronous and asynchronous methods.
+- `.GetSettingInfo()`, and its async counterpart, have been removed. You can use `GetAllSettingInfos()` and then filter down to the individual SettingInfo that you need.
+- The `SettingsUpdateDelegate`, which is used for `SubscribeToAppSettings()` callbacks, passes an `NFigStore` as the third argument instead of explicitly an `NFigRedisStore`. This is because the delegate has been moved into NFig itself.
 
 ## Changes in 2.0
 
