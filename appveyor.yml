@@ -41,7 +41,7 @@ platform: Any CPU
 configuration: Release
 
 build:
-  project: NFig.Redis\NFig.Redis.csproj
+  project: NFig.Redis.sln
   publish_nuget: true
   publish_nuget_symbols: true
   verbosity: normal
