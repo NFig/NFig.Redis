@@ -4,7 +4,7 @@ using NFig;
 using NFig.Redis;
 // ReSharper disable UnusedAutoPropertyAccessor.Local
 
-namespace SampleApplication
+namespace NFig.Redis.Tests
 {
     public enum Tier
     {

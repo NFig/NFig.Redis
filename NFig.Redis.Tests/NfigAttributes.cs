@@ -3,7 +3,7 @@
 
 using NFig;
 
-namespace SampleApplication
+namespace NFig.Redis.Tests
 {
     public class DataCenterAttribute : DefaultSettingValueAttribute
     {
