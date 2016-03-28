@@ -49,7 +49,7 @@ namespace SampleApplication
         public class ChatBotsSettings
         {
             [Setting(false)]
-            [TieredDefaultValue(Tier.Prod, true)]
+            [Tier(Tier.Prod, true)]
             [Description("Enables the Malfunctioning Eddie chat bot.")]
             public bool MalfunctioningEddieEnabled { get; private set; }
         }
@@ -60,12 +60,12 @@ namespace SampleApplication
         public class ConnectionStringsSettings
         {
             [Setting(null)]
-            [TieredDefaultValue(Tier.Local, "local connection string")]
+            [Tier(Tier.Local, "local connection string")]
             [Description("SQL Connection string to the Calculon db.")]
             public string AdServer { get; private set; }
 
             [Setting(null)]
-            [TieredDefaultValue(Tier.Local, "local connection string")]
+            [Tier(Tier.Local, "local connection string")]
             [Description("SQL Connection string to the Calculon.Metrics db.")]
             public string Metrics { get; private set; }
         }
@@ -86,13 +86,13 @@ namespace SampleApplication
         public class BosunSettings
         {
             [Setting(false)]
-            [DataCenterDefaultValue(DataCenter.NewYork, true)]
+            [DataCenter(DataCenter.NewYork, true)]
             [Description("Enables reporting to Bosun.")]
             public bool Enabled { get; private set; }
 
             [Setting(null)]
-            [TieredDataCenterDefaultValue(Tier.Dev, DataCenter.NewYork, "http://ny-devbosun01:8070/api/put")]
-            [TieredDataCenterDefaultValue(Tier.Prod, DataCenter.NewYork, "http://bosun:80/api/put")]
+            [TierDataCenter(Tier.Dev, DataCenter.NewYork, "http://ny-devbosun01:8070/api/put")]
+            [TierDataCenter(Tier.Prod, DataCenter.NewYork, "http://bosun:80/api/put")]
             public string ApiUrl { get; private set; }
 
             [Setting(15)]

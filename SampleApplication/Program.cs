@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using NFig;
 using NFig.Redis;
@@ -7,8 +8,8 @@ using NFig.Redis;
 namespace SampleApplication
 {
     using Override = SettingValue<Tier, DataCenter>;
-    using Factory = SettingsFactory<SampleSettings, Tier, DataCenter>;
     using NFigRedis = NFigRedisStore<SampleSettings, Tier, DataCenter>;
+    using NFigStore = NFigStore<SampleSettings, Tier, DataCenter>;
 
     class Program
     {
@@ -30,7 +31,7 @@ namespace SampleApplication
         }
 
         private static int s_updateInteration = 0;
-        public static void OnSettingsUpdate(Exception ex, SampleSettings settings, NFigRedis nfig)
+        public static void OnSettingsUpdate(Exception ex, SampleSettings settings, NFigStore nfig)
         {
             if (ex != null)
                 throw ex;
@@ -39,7 +40,7 @@ namespace SampleApplication
             Console.WriteLine(settings.ConnectionStrings.AdServer);
             Console.WriteLine(nfig.IsCurrent(settings));
             Console.WriteLine();
-            var info = nfig.GetSettingInfo(settings.ApplicationName, "ConnectionStrings.AdServer");
+            var info = nfig.GetAllSettingInfos(settings.ApplicationName).First(i => i.Name == "ConnectionStrings.AdServer");
             var ac = info.GetActiveValueFor(settings.Tier, settings.DataCenter);
 
             s_updateInteration++;

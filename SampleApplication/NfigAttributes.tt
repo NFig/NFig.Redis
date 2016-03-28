@@ -9,27 +9,27 @@ using NFig;
 
 namespace <#= _namespace #>
 {
-    public class DataCenterDefaultValueAttribute : DefaultSettingValueAttribute
+    public class DataCenterAttribute : DefaultSettingValueAttribute
     {
-        public DataCenterDefaultValueAttribute(<#= _dataCenterEnum #> dataCenter, object defaultValue)
+        public DataCenterAttribute(<#= _dataCenterEnum #> dataCenter, object defaultValue)
         {
             DataCenter = dataCenter;
             DefaultValue = defaultValue;
         }
     }
 
-    public class TieredDefaultValueAttribute : DefaultSettingValueAttribute
+    public class TierAttribute : DefaultSettingValueAttribute
     {
-        public TieredDefaultValueAttribute(<#= _tierEnum #> tier, object defaultValue)
+        public TierAttribute(<#= _tierEnum #> tier, object defaultValue)
         {
             Tier = tier;
             DefaultValue = defaultValue;
         }
     }
 
-    public class TieredDataCenterDefaultValueAttribute : DefaultSettingValueAttribute
+    public class TierDataCenterAttribute : DefaultSettingValueAttribute
     {
-        public TieredDataCenterDefaultValueAttribute(<#= _tierEnum #> tier, <#= _dataCenterEnum #> dataCenter, object defaultValue)
+        public TierDataCenterAttribute(<#= _tierEnum #> tier, <#= _dataCenterEnum #> dataCenter, object defaultValue)
         {
             Tier = tier;
             DataCenter = dataCenter;

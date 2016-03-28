@@ -5,27 +5,27 @@ using NFig;
 
 namespace SampleApplication
 {
-    public class DataCenterDefaultValueAttribute : DefaultSettingValueAttribute
+    public class DataCenterAttribute : DefaultSettingValueAttribute
     {
-        public DataCenterDefaultValueAttribute(DataCenter dataCenter, object defaultValue)
+        public DataCenterAttribute(DataCenter dataCenter, object defaultValue)
         {
             DataCenter = dataCenter;
             DefaultValue = defaultValue;
         }
     }
 
-    public class TieredDefaultValueAttribute : DefaultSettingValueAttribute
+    public class TierAttribute : DefaultSettingValueAttribute
     {
-        public TieredDefaultValueAttribute(Tier tier, object defaultValue)
+        public TierAttribute(Tier tier, object defaultValue)
         {
             Tier = tier;
             DefaultValue = defaultValue;
         }
     }
 
-    public class TieredDataCenterDefaultValueAttribute : DefaultSettingValueAttribute
+    public class TierDataCenterAttribute : DefaultSettingValueAttribute
     {
-        public TieredDataCenterDefaultValueAttribute(Tier tier, DataCenter dataCenter, object defaultValue)
+        public TierDataCenterAttribute(Tier tier, DataCenter dataCenter, object defaultValue)
         {
             Tier = tier;
             DataCenter = dataCenter;
