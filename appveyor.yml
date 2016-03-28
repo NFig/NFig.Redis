@@ -27,6 +27,10 @@ assembly_info:
 install:
   - set PATH=C:\Program Files (x86)\MSBuild\14.0\Bin;%PATH%
   - ps: Scripts\SetNugetVersion.ps1
+  # Setup Redis
+  - nuget install redis-64 -excludeversion
+  - redis-64\tools\redis-server.exe --service-install
+  - redis-64\tools\redis-server.exe --service-start
 
 #---------------------------------#
 #       build configuration       #
@@ -46,7 +50,9 @@ build:
 #       tests configuration       #
 #---------------------------------#
 
-
+test:
+  assemblies:
+    - '**\*.Tests.dll'
 
 #---------------------------------#
 #      artifacts configuration    #
