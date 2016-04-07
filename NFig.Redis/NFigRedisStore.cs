@@ -5,7 +5,7 @@ using StackExchange.Redis;
 
 namespace NFig.Redis
 {
-    public class NFigRedisStore<TSettings, TTier, TDataCenter> : NFigStore<TSettings, TTier, TDataCenter>
+    public class NFigRedisStore<TSettings, TTier, TDataCenter> : NFigStore<TSettings, TTier, TDataCenter>, IDisposable
         where TSettings : class, INFigSettings<TTier, TDataCenter>, new()
         where TTier : struct
         where TDataCenter : struct
@@ -16,17 +16,20 @@ namespace NFig.Redis
         private readonly ConnectionMultiplexer _redis;
         private readonly ISubscriber _subscriber;
         private readonly int _dbIndex;
-        
+        readonly LoadedLuaScript _setWithCommitScript;
+
         public string RedisKeyPrefix { get; }
 
         public NFigRedisStore(
+            TTier tier,
             string redisConnectionString,
             int dbIndex = 0,
             Dictionary<Type, object> additionalDefaultConverters = null,
             int contingencyPollingInterval = 60,
             string redisKeyPrefix = "NFig:"
             )
-        : this (
+        : this(
+            tier,
             ConnectionMultiplexer.Connect(redisConnectionString),
             dbIndex,
             additionalDefaultConverters,
@@ -36,25 +39,32 @@ namespace NFig.Redis
         {
         }
 
+        public void Dispose()
+        {
+            _redis?.Dispose();
+        }
+
         // The reason this constructor is private and there is a public static method wrapper is so the calling dll isn't required to reference to SE.Redis.
         private NFigRedisStore(
+            TTier tier,
             ConnectionMultiplexer redisConnection,
             int dbIndex,
             Dictionary<Type, object> additionalDefaultConverters,
             int contingencyPollingInterval,
             string redisKeyPrefix
             )
-            : base(additionalDefaultConverters, contingencyPollingInterval)
+            : base(tier, additionalDefaultConverters, contingencyPollingInterval)
         {
             _redis = redisConnection;
             _subscriber = _redis.GetSubscriber();
             _dbIndex = dbIndex;
             RedisKeyPrefix = redisKeyPrefix;
-            
+
             _subscriber.Subscribe(APP_UPDATE_CHANNEL, OnAppUpdate);
         }
 
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
+            TTier tier,
             ConnectionMultiplexer redisConnection,
             int db = 0,
             Dictionary<Type, object> additionalDefaultConverters = null,
@@ -62,10 +72,24 @@ namespace NFig.Redis
             string redisKeyPrefix = "NFig:"
             )
         {
-            return new NFigRedisStore<TSettings, TTier, TDataCenter>(redisConnection, db, additionalDefaultConverters, contingencyPollingInterval, redisKeyPrefix);
+            return new NFigRedisStore<TSettings, TTier, TDataCenter>(tier, redisConnection, db, additionalDefaultConverters, contingencyPollingInterval, redisKeyPrefix);
         }
 
-        public override async Task SetOverrideAsync(string appName, string settingName, string value, TTier tier, TDataCenter dataCenter)
+
+        private const string SET_WITH_COMMIT_BODY = @"
+if redis.call('hget', @hashName, @commitKey) == @commitId
+then
+    redis.call('hmset', @hashName, @key, @value, @commitKey, @newCommit)
+else
+    return redis.error_reply('Commit id mismatch')
+end
+";
+
+
+        private static readonly LuaScript s_setWithCommitScript = LuaScript.Prepare(SET_WITH_COMMIT_BODY);
+
+
+        public override async Task SetOverrideAsync(string appName, string settingName, string value, TDataCenter dataCenter, string commitId = null)
         {
             // make sure this is even valid input before saving it to Redis
             if (!IsValidStringForSetting(settingName, value))
@@ -74,32 +98,92 @@ namespace NFig.Redis
                     settingName,
                     value,
                     false,
-                    tier,
+                    Tier,
                     dataCenter);
 
-            var key = GetOverrideKey(settingName, tier, dataCenter);
+            var key = GetOverrideKey(settingName, Tier, dataCenter);
             var db = GetRedisDb();
+            if (commitId != null)
+            {
+                try
+                {
+                    await db.ScriptEvaluateAsync(s_setWithCommitScript, new
+                    {
+                        hashName = (RedisKey)GetRedisHashName(appName),
+                        commitKey = COMMIT_KEY,
+                        commitId,
+                        key,
+                        value,
+                        newCommit = NewCommit()
+                    });
+                }
+                catch (RedisException ex)
+                {
+                    throw new NFigException("Unable to set override. Redis operation failed. " + appName + "." + settingName, ex);
+                }
+            }
+            else
+            {
+                await db.HashSetAsync(GetRedisHashName(appName), new[] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, NewCommit()) }).ConfigureAwait(false);
+            }
 
-            await db.HashSetAsync(GetRedisHashName(appName), new [] { new HashEntry(key, value), new HashEntry(COMMIT_KEY, NewCommit()) }).ConfigureAwait(false);
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
 
-        public override async Task ClearOverrideAsync(string appName, string settingName, TTier tier, TDataCenter dataCenter)
+
+        private const string CLEAR_WITH_COMMIT_BODY = @"
+if redis.call('hget', @hashName, @commitKey) == @commitId
+then
+    redis.call('hdel', @hashName, @key)
+    redis.call('hset', @hashName, @commitKey, @newCommit)
+else
+    return redis.error_reply('Commit id mismatch')
+end
+";
+
+        private const string CLEAR_WITHOUT_COMMIT_BODY = @"
+redis.call('hdel', @hashName, @key)
+redis.call('hset', @hashName, @commitKey, @newCommit)
+";
+
+        private static readonly LuaScript s_clearWithCommitCheckScript = LuaScript.Prepare(CLEAR_WITH_COMMIT_BODY);
+
+        private static readonly LuaScript s_clearWithoutCommitCheckScript = LuaScript.Prepare(CLEAR_WITHOUT_COMMIT_BODY);
+
+        public override async Task ClearOverrideAsync(string appName, string settingName, TDataCenter dataCenter, string commitId = null)
         {
-            var key = GetOverrideKey(settingName, tier, dataCenter);
+            var key = GetOverrideKey(settingName, Tier, dataCenter);
             var db = GetRedisDb();
+            var hashName = (RedisKey)GetRedisHashName(appName);
 
-            var hashName = GetRedisHashName(appName);
-            var tran = db.CreateTransaction();
-            var delTask = tran.HashDeleteAsync(hashName, key);
-            var setTask = tran.HashSetAsync(hashName, COMMIT_KEY, NewCommit());
-            var committed = await tran.ExecuteAsync().ConfigureAwait(false);
-            if (!committed)
-                throw new NFigException("Unable to clear override. Redis Transaction failed. " + appName + "." + settingName);
-
-            // not sure if these actually need to be awaited after ExecuteAsync finishes
-            await delTask.ConfigureAwait(false);
-            await setTask.ConfigureAwait(false);
+            try
+            {
+                if (commitId != null)
+                {
+                    await db.ScriptEvaluateAsync(s_clearWithCommitCheckScript, new
+                    {
+                        hashName,
+                        commitKey = COMMIT_KEY,
+                        commitId,
+                        key,
+                        newCommit = NewCommit()
+                    });
+                }
+                else
+                {
+                    await db.ScriptEvaluateAsync(s_clearWithoutCommitCheckScript, new
+                    {
+                        hashName,
+                        commitKey = COMMIT_KEY,
+                        key,
+                        newCommit = NewCommit()
+                    });
+                }
+            }
+            catch (RedisException ex)
+            {
+                throw new NFigException("Unable to clear override. Redis operation failed. " + appName + "." + settingName, ex);
+            }
 
             await _subscriber.PublishAsync(APP_UPDATE_CHANNEL, appName).ConfigureAwait(false);
         }
@@ -215,7 +299,7 @@ namespace NFig.Redis
             return _redis.GetDatabase(_dbIndex);
         }
 
-        private string GetRedisHashName(string appName)
+        internal string GetRedisHashName(string appName)
         {
             return RedisKeyPrefix + appName;
         }
