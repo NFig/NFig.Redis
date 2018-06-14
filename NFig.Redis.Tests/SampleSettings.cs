@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using NFig;
 using NFig.Redis;
 // ReSharper disable UnusedAutoPropertyAccessor.Local
 
-namespace SampleApplication
+namespace NFig.Redis.Tests
 {
     public enum Tier
     {
@@ -31,7 +31,7 @@ namespace SampleApplication
 
         [SettingsGroup]
         public CreativesSettings Creatives { get; private set; }
-        
+
         public class CreativesSettings
         {
             [Setting(30)]

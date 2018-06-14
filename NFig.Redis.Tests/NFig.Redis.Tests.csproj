@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net462;netcoreapp2.0</TargetFrameworks>
+        <ApplicationIcon />
+        <OutputType>Library</OutputType>
+        <StartupObject />
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.7.2" />
+        <PackageReference Include="NFig" Version="2.1.0" />
+        <PackageReference Include="NUnit" Version="3.10.1" />
+        <PackageReference Include="NUnit3TestAdapter" Version="3.10.0" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\NFig.Redis\NFig.Redis.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <None Update="NfigAttributes.tt">
+        <Generator>TextTemplatingFileGenerator</Generator>
+        <LastGenOutput>NfigAttributes.cs</LastGenOutput>
+      </None>
+    </ItemGroup>
+    <ItemGroup>
+      <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+    </ItemGroup>
+    <ItemGroup>
+      <Compile Update="NfigAttributes.cs">
+        <DesignTime>True</DesignTime>
+        <AutoGen>True</AutoGen>
+        <DependentUpon>NfigAttributes.tt</DependentUpon>
+      </Compile>
+    </ItemGroup>
+</Project>
