@@ -9,7 +9,7 @@
         <PackageTags>SEttings Config Configuration Distributed Redis</PackageTags>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="NFig" Version="2.1.0" />
+        <PackageReference Include="NFig" Version="2.2.0" />
         <PackageReference Include="StackExchange.Redis" Version="1.2.6" />
     </ItemGroup>
 </Project>

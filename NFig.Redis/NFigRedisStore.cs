@@ -55,7 +55,7 @@ namespace NFig.Redis
         public NFigRedisStore(
             string redisConnectionString,
             int dbIndex = 0,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
+            IEnumerable<ISettingConverter> additionalDefaultConverters = null,
             int contingencyPollingInterval = 60,
             string redisKeyPrefix = "NFig:"
             )
@@ -73,7 +73,7 @@ namespace NFig.Redis
         private NFigRedisStore(
             ConnectionMultiplexer redisConnection,
             int dbIndex,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters,
+            IEnumerable<ISettingConverter> additionalDefaultConverters,
             int contingencyPollingInterval,
             string redisKeyPrefix
             )
@@ -89,7 +89,7 @@ namespace NFig.Redis
         public static NFigRedisStore<TSettings, TTier, TDataCenter> FromConnectionMultiplexer(
             ConnectionMultiplexer redisConnection,
             int db = 0,
-            Dictionary<Type, SettingConverterAttribute> additionalDefaultConverters = null,
+            IEnumerable<ISettingConverter> additionalDefaultConverters = null,
             int contingencyPollingInterval = 60,
             string redisKeyPrefix = "NFig:"
             )
