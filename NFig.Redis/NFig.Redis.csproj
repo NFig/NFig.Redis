@@ -10,6 +10,6 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="NFig" Version="2.2.0" />
-        <PackageReference Include="StackExchange.Redis" Version="1.2.6" />
+        <PackageReference Include="StackExchange.Redis" Version="2.0.505" />
     </ItemGroup>
 </Project>
